@@ -36,6 +36,7 @@
 #include "esp_openthread_netif_glue.h"
 #include "esp_openthread_types.h"
 #include "esp_vfs_eventfd.h"
+#include "esp_coexist.h"
 
 #include "openthread/border_router.h"
 #include "openthread/cli.h"
@@ -314,14 +315,22 @@ static void ot_task(void *arg)
     esp_netif_t *wifi_netif = (esp_netif_t *)arg;
 
     /* OpenThread platform configuration for the native 802.15.4 radio */
-    esp_openthread_platform_config_t ot_config = {
-        .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
-        .host_config  = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
-        .port_config  = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
+    esp_openthread_platform_config_t ot_platform_config = {
+        .radio_config = {
+            .radio_mode = RADIO_MODE_NATIVE,
+        },
+        .host_config = {
+            .host_connection_mode = HOST_CONNECTION_MODE_NONE,
+        },
+        .port_config = {
+            .storage_partition_name = "nvs",
+            .netif_queue_size = 10,
+            .task_queue_size = 10,
+        },
     };
 
     /* Initialize the OpenThread stack */
-    ESP_ERROR_CHECK(esp_openthread_init(&ot_config));
+    ESP_ERROR_CHECK(esp_openthread_init(&ot_platform_config));
 
     /* Get the OpenThread instance */
     otInstance *instance = esp_openthread_get_instance();
@@ -338,8 +347,9 @@ static void ot_task(void *arg)
     esp_openthread_cli_init();
 #endif
 
-    /* Initialize the border router backbone (Wi-Fi interface) */
-    ESP_ERROR_CHECK(esp_openthread_border_router_init(wifi_netif));
+    /* Set the Wi-Fi interface as the border router backbone, then init */
+    esp_openthread_set_backbone_netif(wifi_netif);
+    ESP_ERROR_CHECK(esp_openthread_border_router_init());
 
     ESP_LOGI(TAG, "OpenThread Border Router initialized");
 
@@ -428,6 +438,11 @@ void app_main(void)
 
     /* --- Launch the OpenThread task --- */
     xTaskCreate(ot_task, "ot_main", 20480, wifi_netif, 5, NULL);
+
+    /* --- Enable Wi-Fi / 802.15.4 radio coexistence --- */
+#if CONFIG_ESP_COEX_SW_COEXIST_ENABLE && CONFIG_SOC_IEEE802154_SUPPORTED
+    ESP_ERROR_CHECK(esp_coex_wifi_i154_enable());
+#endif
 
     ESP_LOGI(TAG, "OTBR startup complete — %s is online", DEVICE_NAME);
 }
