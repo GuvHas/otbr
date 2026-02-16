@@ -30,16 +30,16 @@ extends your mesh as an additional border router.
 
 ### 1. Prerequisites
 
-You need **one** of the following toolchains:
+Install **one** of the following:
 
 | Option | Install |
 |--------|---------|
-| **PlatformIO** (recommended) | [VS Code](https://code.visualstudio.com/) + [PlatformIO extension](https://platformio.org/install/ide?install=vscode) |
-| **ESP-IDF** (alternative) | [ESP-IDF v5.3+](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/index.html) or the [VS Code ESP-IDF extension](https://marketplace.visualstudio.com/items?itemName=espressif.esp-idf-extension) |
+| **VS Code ESP-IDF Extension** (recommended) | [VS Code](https://code.visualstudio.com/) + [ESP-IDF extension](https://marketplace.visualstudio.com/items?itemName=espressif.esp-idf-extension) |
+| **ESP-IDF command line** | [ESP-IDF v5.3+](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/index.html) |
 
 ### 2. Configure
 
-Edit **`src/config.h`** before flashing each device:
+Edit **`main/config.h`** before flashing each device:
 
 ```c
 // Give each border router a unique name
@@ -53,7 +53,7 @@ Edit **`src/config.h`** before flashing each device:
 #### Joining an existing Thread network (recommended)
 
 Get your Thread network's active dataset TLV hex string, then paste it into
-`src/config.h`:
+`main/config.h`:
 
 ```c
 #define THREAD_DATASET_TLVS  "0e080000000000010000000300001935060004001fffe0..."
@@ -77,65 +77,44 @@ serial CLI.
 
 ### 3. Build & Flash
 
-#### Using PlatformIO
-
-1. Open this folder in VS Code
-2. PlatformIO should auto-detect the project
-3. Plug in the ESP32-C6 via USB-C
-4. Click the **Upload** button (→ arrow) in the PlatformIO toolbar
-   — or run in the terminal:
-   ```bash
-   pio run -t upload
-   ```
-
-#### Using ESP-IDF (idf.py)
-
-If you prefer native ESP-IDF over PlatformIO:
-
-```bash
-# 1. Rename src/ to main/ (ESP-IDF convention)
-mv src main
-
-# 2. Set the target chip
-idf.py set-target esp32c6
-
-# 3. (Optional) Fine-tune config — sdkconfig.defaults is applied automatically
-idf.py menuconfig
-
-# 4. Build
-idf.py build
-
-# 5. Flash (adjust port if needed)
-idf.py -p /dev/ttyACM0 flash
-
-# 6. Monitor serial output
-idf.py -p /dev/ttyACM0 monitor
-```
-
-> **Note:** When using `idf.py`, rename the `src/` directory to `main/`
-> because ESP-IDF expects the main component in a folder named `main`.
-> PlatformIO handles this mapping automatically.
-
 #### Using VS Code ESP-IDF Extension
 
 1. Install the [ESP-IDF extension](https://marketplace.visualstudio.com/items?itemName=espressif.esp-idf-extension)
-2. Rename `src/` to `main/`
-3. Open this folder in VS Code
-4. Press `Ctrl+Shift+P` → "ESP-IDF: Set Espressif device target" → select `esp32c6`
-5. Press `Ctrl+Shift+P` → "ESP-IDF: Build your project"
-6. Press `Ctrl+Shift+P` → "ESP-IDF: Flash your project"
-7. Press `Ctrl+Shift+P` → "ESP-IDF: Monitor your device"
+   — when prompted, let it install ESP-IDF v5.5 (handles Python, toolchains, everything)
+2. Open this folder in VS Code
+3. `Ctrl+Shift+P` → **"ESP-IDF: Set Espressif Device Target"** → select `esp32c6`
+4. `Ctrl+Shift+P` → **"ESP-IDF: Build your project"**
+5. Plug in the ESP32-C6 via USB-C
+6. `Ctrl+Shift+P` → **"ESP-IDF: Flash your project"**
+7. `Ctrl+Shift+P` → **"ESP-IDF: Monitor your device"**
 
-### 4. Monitor (optional)
+#### Using idf.py (command line)
+
+```bash
+# 1. Set the target chip
+idf.py set-target esp32c6
+
+# 2. (Optional) Fine-tune config — sdkconfig.defaults is applied automatically
+idf.py menuconfig
+
+# 3. Build
+idf.py build
+
+# 4. Flash (adjust port if needed)
+idf.py -p /dev/ttyACM0 flash      # Linux
+idf.py -p COM3 flash               # Windows
+
+# 5. Monitor serial output
+idf.py -p /dev/ttyACM0 monitor    # Linux
+idf.py -p COM3 monitor             # Windows
+```
+
+### 4. Monitor
 
 To see logs and use the OpenThread CLI:
 
 ```bash
-# PlatformIO
-pio device monitor
-
-# ESP-IDF
-idf.py -p /dev/ttyACM0 monitor
+idf.py -p COM3 monitor
 ```
 
 ### 5. Verify It Joined
@@ -173,7 +152,7 @@ fd12:3456:789a:1::abcd
 
 To deploy additional border routers:
 
-1. Edit `src/config.h` — change only `DEVICE_NAME`:
+1. Edit `main/config.h` — change only `DEVICE_NAME`:
    ```c
    #define DEVICE_NAME  "otbr-02"
    ```
@@ -233,33 +212,26 @@ Home Assistant setups, the single-chip ESP32-C6 works well.
 - Try `factoryreset` and re-provision
 
 ### Build errors
-
-**PlatformIO:**
-```bash
-pio pkg update
-```
-
-**ESP-IDF:**
 - ESP-IDF v5.3+ is required for full C6 + OTBR support
 - Run `idf.py fullclean` and rebuild if sdkconfig gets out of sync
 - Verify `sdkconfig.defaults` is in the project root
 
 ### "No Thread dataset configured" on boot
 - You left `THREAD_DATASET_TLVS` empty and `THREAD_AUTO_START` is 0
-- Either paste your dataset TLV hex into `src/config.h` and reflash,
+- Either paste your dataset TLV hex into `main/config.h` and reflash,
   or provision via serial CLI or Home Assistant
 
 ## Project Structure
 
 ```
 esp32c6-otbr/
-├── platformio.ini          # PlatformIO project config
 ├── CMakeLists.txt          # Top-level ESP-IDF cmake
 ├── partitions.csv          # Custom partition table
 ├── sdkconfig.defaults      # ESP-IDF Kconfig defaults (OpenThread, Wi-Fi, etc.)
 ├── README.md               # This file
-└── src/
+└── main/
     ├── CMakeLists.txt      # Main component cmake
+    ├── idf_component.yml   # Managed component dependencies (mdns)
     ├── config.h            # ★ USER CONFIG — edit this per device ★
     └── main.c              # Application entry point
 ```
