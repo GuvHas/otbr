@@ -27,12 +27,29 @@
 #define WIFI_MAX_RETRY          0
 
 /* ------------------------------------------------------------------ */
-/*  THREAD NETWORK (leave defaults to join via HA or CLI later)        */
+/*  JOIN AN EXISTING THREAD NETWORK                                    */
 /* ------------------------------------------------------------------ */
 
-/* If you want the device to auto-form a network on first boot,
- * set this to 1.  If 0 the device waits for dataset provisioning
- * via the OpenThread CLI (serial console) or via HA.                  */
+/* To join an existing Thread network, paste the dataset TLV hex here.
+ *
+ * How to get this string:
+ *   Home Assistant → Settings → Devices & Services → Thread
+ *     → your network → copy the "Active Operational Dataset" hex.
+ *   Or from another OTBR's CLI:  dataset active -x
+ *
+ * Example (yours will be different):
+ *   #define THREAD_DATASET_TLVS  "0e080000000000010000..."
+ *
+ * Leave empty ("") to provision later via CLI or Home Assistant.      */
+#define THREAD_DATASET_TLVS     ""
+
+/* ------------------------------------------------------------------ */
+/*  CREATE A NEW THREAD NETWORK (only if not joining an existing one)  */
+/* ------------------------------------------------------------------ */
+
+/* If THREAD_DATASET_TLVS is empty AND no saved dataset exists in NVS,
+ * setting this to 1 will auto-create a brand new Thread network.
+ * Usually you want this set to 0 so the device waits for credentials. */
 #define THREAD_AUTO_START       0
 
 /* Default Thread channel (only used when THREAD_AUTO_START == 1)      */
