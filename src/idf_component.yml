@@ -1,0 +1,6 @@
+## ESP-IDF managed component dependencies
+## In ESP-IDF 5.5+ mdns is no longer bundled — it must be fetched
+## from the component registry.
+dependencies:
+  espressif/mdns:
+    version: "*"
