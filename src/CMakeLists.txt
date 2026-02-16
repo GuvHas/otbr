@@ -8,7 +8,6 @@ idf_component_register(
         esp_event
         mdns
         driver
-        esp_openthread
         openthread
         vfs
 )
