@@ -20,6 +20,12 @@ CONFIG_ESP_WIFI_ENABLED=y
 CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE=n
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
 
+# ---- Wi-Fi / 802.15.4 Coexistence ----
+# CRITICAL: The ESP32-C6 shares one 2.4 GHz radio between Wi-Fi and
+# 802.15.4 (Thread).  This enables time-division multiplexing so both
+# protocols can operate on the same chip.
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+
 # ---- LWIP ----
 CONFIG_LWIP_IPV6=y
 CONFIG_LWIP_IPV6_FORWARD=y

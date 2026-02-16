@@ -176,28 +176,79 @@ static void init_mdns(void)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Hex string → byte array helper                                     */
+/* ------------------------------------------------------------------ */
+
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int hex_to_bytes(const char *hex, uint8_t *out, size_t max_len)
+{
+    size_t hex_len = strlen(hex);
+    if (hex_len == 0 || hex_len % 2 != 0) return -1;
+
+    size_t byte_len = hex_len / 2;
+    if (byte_len > max_len) return -1;
+
+    for (size_t i = 0; i < byte_len; i++) {
+        int hi = hex_nibble(hex[i * 2]);
+        int lo = hex_nibble(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return -1;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return (int)byte_len;
+}
+
+/* ------------------------------------------------------------------ */
 /*  OpenThread dataset helpers                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Load a Thread active dataset from the hex TLV string in config.h.
+ * Returns true if the dataset was successfully applied.
+ */
+static bool load_dataset_from_tlvs(otInstance *instance)
+{
+    const char *hex = THREAD_DATASET_TLVS;
+    if (strlen(hex) == 0) return false;
+
+    otOperationalDatasetTlvs tlvs;
+    int len = hex_to_bytes(hex, tlvs.mTlvs, sizeof(tlvs.mTlvs));
+    if (len < 0) {
+        ESP_LOGE(TAG, "THREAD_DATASET_TLVS: invalid hex string");
+        return false;
+    }
+    tlvs.mLength = (uint8_t)len;
+
+    otError error = otDatasetSetActiveTlvs(instance, &tlvs);
+    if (error != OT_ERROR_NONE) {
+        ESP_LOGE(TAG, "Failed to set active dataset from TLVs: %d", error);
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Thread dataset loaded from config (%d bytes)", len);
+    return true;
+}
+
 #if THREAD_AUTO_START
+/**
+ * Create a brand new Thread network (only used when no existing
+ * dataset is available and THREAD_AUTO_START == 1).
+ */
 static void create_default_dataset(otInstance *instance)
 {
     otOperationalDataset dataset;
-    otError error;
 
-    /* Try to load an existing dataset from NVS first */
-    error = otDatasetGetActive(instance, &dataset);
-    if (error == OT_ERROR_NONE) {
-        ESP_LOGI(TAG, "Active dataset already present in NVS — using it");
-        return;
-    }
-
-    ESP_LOGI(TAG, "No active dataset found — creating default");
+    ESP_LOGI(TAG, "Creating new Thread network");
 
     memset(&dataset, 0, sizeof(dataset));
 
-    /* Create a new default dataset */
-    error = otDatasetCreateNewNetwork(instance, &dataset);
+    otError error = otDatasetCreateNewNetwork(instance, &dataset);
     if (error != OT_ERROR_NONE) {
         ESP_LOGE(TAG, "Failed to create new network dataset: %d", error);
         return;
@@ -219,7 +270,7 @@ static void create_default_dataset(otInstance *instance)
     if (error != OT_ERROR_NONE) {
         ESP_LOGE(TAG, "Failed to set active dataset: %d", error);
     } else {
-        ESP_LOGI(TAG, "Default dataset configured: ch=%d, name=%s",
+        ESP_LOGI(TAG, "New network created: ch=%d, name=%s",
                  THREAD_CHANNEL, THREAD_NETWORK_NAME);
     }
 }
@@ -292,25 +343,42 @@ static void ot_task(void *arg)
 
     ESP_LOGI(TAG, "OpenThread Border Router initialized");
 
-#if THREAD_AUTO_START
-    /* Auto-form or join a network */
+    /* ----- Acquire the dataset and start Thread ----- */
     esp_openthread_lock_acquire(portMAX_DELAY);
 
-    create_default_dataset(instance);
+    bool dataset_ready = false;
+    otOperationalDataset dataset;
 
-    otIp6SetEnabled(instance, true);
-    otThreadSetEnabled(instance, true);
+    /* Priority 1: Saved dataset in NVS (from a previous boot or CLI) */
+    if (otDatasetGetActive(instance, &dataset) == OT_ERROR_NONE) {
+        ESP_LOGI(TAG, "Using saved Thread dataset from NVS");
+        dataset_ready = true;
+    }
+    /* Priority 2: Pre-provisioned TLV hex from config.h */
+    else if (load_dataset_from_tlvs(instance)) {
+        dataset_ready = true;
+    }
+#if THREAD_AUTO_START
+    /* Priority 3: Create a brand new Thread network */
+    if (!dataset_ready) {
+        create_default_dataset(instance);
+        dataset_ready = true;
+    }
+#endif
+
+    if (dataset_ready) {
+        otIp6SetEnabled(instance, true);
+        otThreadSetEnabled(instance, true);
+        ESP_LOGI(TAG, "Thread interface up — joining network...");
+    } else {
+        ESP_LOGI(TAG, "No Thread dataset configured");
+        ESP_LOGI(TAG, "Provision via Home Assistant or serial CLI:");
+        ESP_LOGI(TAG, "  > dataset set active <hex-TLV>");
+        ESP_LOGI(TAG, "  > ifconfig up");
+        ESP_LOGI(TAG, "  > thread start");
+    }
 
     esp_openthread_lock_release();
-
-    ESP_LOGI(TAG, "Thread interface started (auto-start mode)");
-#else
-    ESP_LOGI(TAG, "Thread waiting for dataset provisioning via CLI or Home Assistant");
-    ESP_LOGI(TAG, "Connect serial monitor and use OT CLI commands:");
-    ESP_LOGI(TAG, "  > dataset set active <hex-TLV>");
-    ESP_LOGI(TAG, "  > ifconfig up");
-    ESP_LOGI(TAG, "  > thread start");
-#endif
 
     /* Main OpenThread run loop — this never returns */
     esp_openthread_cli_create_task();

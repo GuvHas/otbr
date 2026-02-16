@@ -4,6 +4,9 @@ A standalone Thread Border Router for the **Seeed Studio XIAO ESP32-C6** that
 integrates with **Home Assistant**. Each device is powered by USB-C only — no
 host computer or data connection required after flashing.
 
+The primary use case is **joining an existing Thread network** so the ESP32-C6
+extends your mesh as an additional border router.
+
 ## Hardware
 
 - **Seeed Studio XIAO ESP32-C6** (or any ESP32-C6 development board)
@@ -15,6 +18,7 @@ host computer or data connection required after flashing.
 - **Standalone operation** — USB power only, no host needed
 - **Wi-Fi backbone** — connects to your home network wirelessly
 - **Native 802.15.4** — hardware Thread radio, no external module
+- **Pre-provisioned joining** — paste your Thread dataset TLV and flash
 - **Configurable device names** — run multiple OTBRs with unique identities
 - **Home Assistant discovery** — auto-discovered via mDNS
 - **OpenThread CLI** — serial console for provisioning & diagnostics
@@ -26,21 +30,54 @@ host computer or data connection required after flashing.
 
 ### 1. Prerequisites
 
-- [VS Code](https://code.visualstudio.com/) with the
-  [PlatformIO extension](https://platformio.org/install/ide?install=vscode)
-- USB-C cable
+You need **one** of the following toolchains:
+
+| Option | Install |
+|--------|---------|
+| **PlatformIO** (recommended) | [VS Code](https://code.visualstudio.com/) + [PlatformIO extension](https://platformio.org/install/ide?install=vscode) |
+| **ESP-IDF** (alternative) | [ESP-IDF v5.3+](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/index.html) or the [VS Code ESP-IDF extension](https://marketplace.visualstudio.com/items?itemName=espressif.esp-idf-extension) |
 
 ### 2. Configure
 
 Edit **`src/config.h`** before flashing each device:
 
 ```c
-#define DEVICE_NAME     "otbr-01"           // Unique per device
+// Give each border router a unique name
+#define DEVICE_NAME     "otbr-01"
+
+// Your home Wi-Fi
 #define WIFI_SSID       "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
 ```
 
+#### Joining an existing Thread network (recommended)
+
+Get your Thread network's active dataset TLV hex string, then paste it into
+`src/config.h`:
+
+```c
+#define THREAD_DATASET_TLVS  "0e080000000000010000000300001935060004001fffe0..."
+```
+
+**Where to find the TLV hex string:**
+
+- **Home Assistant:** Settings → Devices & Services → Thread → your network
+  → "Active Operational Dataset" (copy the hex)
+- **Another OTBR's CLI:** `dataset active -x`
+- **Apple Home:** Settings → Thread Network → scroll down → copy credential
+
+The device will automatically join the network on boot. The dataset is saved
+to NVS, so it persists across reboots.
+
+#### Waiting for provisioning (alternative)
+
+If you leave `THREAD_DATASET_TLVS` empty (`""`), the device starts with no
+Thread dataset and waits for credentials via Home Assistant discovery or
+serial CLI.
+
 ### 3. Build & Flash
+
+#### Using PlatformIO
 
 1. Open this folder in VS Code
 2. PlatformIO should auto-detect the project
@@ -51,45 +88,86 @@ Edit **`src/config.h`** before flashing each device:
    pio run -t upload
    ```
 
+#### Using ESP-IDF (idf.py)
+
+If you prefer native ESP-IDF over PlatformIO:
+
+```bash
+# 1. Rename src/ to main/ (ESP-IDF convention)
+mv src main
+
+# 2. Set the target chip
+idf.py set-target esp32c6
+
+# 3. (Optional) Fine-tune config — sdkconfig.defaults is applied automatically
+idf.py menuconfig
+
+# 4. Build
+idf.py build
+
+# 5. Flash (adjust port if needed)
+idf.py -p /dev/ttyACM0 flash
+
+# 6. Monitor serial output
+idf.py -p /dev/ttyACM0 monitor
+```
+
+> **Note:** When using `idf.py`, rename the `src/` directory to `main/`
+> because ESP-IDF expects the main component in a folder named `main`.
+> PlatformIO handles this mapping automatically.
+
+#### Using VS Code ESP-IDF Extension
+
+1. Install the [ESP-IDF extension](https://marketplace.visualstudio.com/items?itemName=espressif.esp-idf-extension)
+2. Rename `src/` to `main/`
+3. Open this folder in VS Code
+4. Press `Ctrl+Shift+P` → "ESP-IDF: Set Espressif device target" → select `esp32c6`
+5. Press `Ctrl+Shift+P` → "ESP-IDF: Build your project"
+6. Press `Ctrl+Shift+P` → "ESP-IDF: Flash your project"
+7. Press `Ctrl+Shift+P` → "ESP-IDF: Monitor your device"
+
 ### 4. Monitor (optional)
 
 To see logs and use the OpenThread CLI:
 
 ```bash
+# PlatformIO
 pio device monitor
+
+# ESP-IDF
+idf.py -p /dev/ttyACM0 monitor
 ```
 
-### 5. Join Your Thread Network
+### 5. Verify It Joined
 
-**Option A: Via Home Assistant (recommended)**
+Once the device boots, the serial log should show:
+
+```
+Thread dataset loaded from config (XX bytes)
+Thread interface up — joining network...
+Thread role changed: child
+Thread role changed: router
+```
+
+If you see `router` or `leader`, the device has successfully joined the
+Thread network and is providing border routing services.
+
+You can also check from the CLI:
+
+```
+> state
+router
+> ipaddr
+fd12:3456:789a:1::abcd
+...
+```
+
+### 6. Home Assistant Discovery
 
 1. Go to **Settings → Devices & Services → Thread**
 2. Your new OTBR should appear (named as per `DEVICE_NAME`)
-3. HA can push your existing Thread network credentials to the new OTBR
-
-**Option B: Via Serial Console**
-
-1. Open the serial monitor: `pio device monitor`
-2. Get the Thread dataset from HA (Settings → Thread → your network → copy TLV)
-3. Enter these commands:
-   ```
-   > dataset set active <paste-hex-TLV-here>
-   Done
-   > ifconfig up
-   Done
-   > thread start
-   Done
-   ```
-4. After a few seconds, check status:
-   ```
-   > state
-   router
-   ```
-
-**Option C: Auto-start a new network**
-
-In `src/config.h`, set `THREAD_AUTO_START` to `1`. The device will create its
-own Thread network on first boot (you can then share credentials to HA).
+3. If you used `THREAD_DATASET_TLVS`, it's already on the correct network
+4. If you left it empty, HA can push your Thread credentials to the device
 
 ## Running Multiple OTBRs
 
@@ -99,11 +177,12 @@ To deploy additional border routers:
    ```c
    #define DEVICE_NAME  "otbr-02"
    ```
-2. Flash to the next ESP32-C6
-3. Repeat for `otbr-03`, etc.
+2. Keep the same `THREAD_DATASET_TLVS` (all OTBRs share one Thread network)
+3. Flash to the next ESP32-C6
+4. Repeat for `otbr-03`, etc.
 
 All devices should use the **same Wi-Fi credentials** and the **same Thread
-dataset** (HA manages this automatically once they're all discovered).
+dataset**.
 
 ## Useful OpenThread CLI Commands
 
@@ -121,6 +200,19 @@ dataset** (HA manages this automatically once they're all discovered).
 | `br state` | Border router state |
 | `factoryreset` | Erase all settings and restart |
 
+## RF Coexistence Note
+
+The ESP32-C6 has a **single 2.4 GHz radio** shared between Wi-Fi and
+802.15.4 (Thread) via time-division multiplexing. This means:
+
+- Wi-Fi and Thread **cannot receive simultaneously**
+- Higher Wi-Fi traffic may cause some Thread packet loss
+- This is adequate for **home use** with small-to-medium Thread networks
+
+For production or high-reliability deployments, Espressif recommends a
+dual-SoC design (e.g., ESP32-S3 + ESP32-H2 with separate radios). For most
+Home Assistant setups, the single-chip ESP32-C6 works well.
+
 ## Troubleshooting
 
 ### Device not appearing in Home Assistant
@@ -136,16 +228,26 @@ dataset** (HA manages this automatically once they're all discovered).
 
 ### Thread stuck in "detached" state
 - Verify the dataset matches your existing Thread network exactly
+- Make sure `THREAD_DATASET_TLVS` was copied correctly (no extra spaces)
 - Check that the Thread channel isn't congested
 - Try `factoryreset` and re-provision
 
 ### Build errors
-- Ensure PlatformIO has the latest `espressif32` platform:
-  ```bash
-  pio pkg update
-  ```
+
+**PlatformIO:**
+```bash
+pio pkg update
+```
+
+**ESP-IDF:**
 - ESP-IDF v5.3+ is required for full C6 + OTBR support
-- If you see OpenThread-related errors, verify `sdkconfig.defaults` was picked up
+- Run `idf.py fullclean` and rebuild if sdkconfig gets out of sync
+- Verify `sdkconfig.defaults` is in the project root
+
+### "No Thread dataset configured" on boot
+- You left `THREAD_DATASET_TLVS` empty and `THREAD_AUTO_START` is 0
+- Either paste your dataset TLV hex into `src/config.h` and reflash,
+  or provision via serial CLI or Home Assistant
 
 ## Project Structure
 
