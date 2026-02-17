@@ -387,6 +387,14 @@ static void ot_task(void *arg)
     /* Initialize the OpenThread stack */
     ESP_ERROR_CHECK(esp_openthread_init(&ot_platform_config));
 
+    /* Create the OpenThread network interface (connects OT stack to LWIP).
+     * Without this, the border router cannot route packets between
+     * Thread and Wi-Fi — ND6/RS messages fail and HA can't discover us. */
+    esp_netif_config_t ot_netif_cfg = ESP_NETIF_DEFAULT_OPENTHREAD();
+    esp_netif_t *ot_netif = esp_netif_new(&ot_netif_cfg);
+    assert(ot_netif != NULL);
+    ESP_ERROR_CHECK(esp_netif_attach(ot_netif, esp_openthread_netif_glue_init(&ot_platform_config)));
+
     /* Get the OpenThread instance */
     otInstance *instance = esp_openthread_get_instance();
 
