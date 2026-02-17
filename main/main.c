@@ -27,6 +27,7 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "mdns.h"
+#include "driver/gpio.h"
 #include "driver/uart.h"
 
 #include "esp_openthread.h"
@@ -440,6 +441,16 @@ void app_main(void)
     /* --- TCP/IP and event loop --- */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    /* --- Switch to external antenna (XIAO ESP32-C6) --- */
+    gpio_config_t ant_conf = {
+        .pin_bit_mask = (1ULL << GPIO_NUM_3) | (1ULL << GPIO_NUM_14),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    ESP_ERROR_CHECK(gpio_config(&ant_conf));
+    gpio_set_level(GPIO_NUM_3, 0);
+    gpio_set_level(GPIO_NUM_14, 1);
+    ESP_LOGI(TAG, "Antenna: external");
 
     /* --- Wi-Fi (backbone network) --- */
     esp_netif_t *wifi_netif = init_wifi();
