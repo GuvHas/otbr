@@ -307,55 +307,23 @@ static void ot_state_change_callback(otChangedFlags flags, void *context)
 }
 
 /* ------------------------------------------------------------------ */
-/*  OpenThread main task                                               */
+/*  Border router init task (runs after mainloop has started)          */
 /* ------------------------------------------------------------------ */
 
-static void ot_task(void *arg)
+static void ot_br_init_task(void *arg)
 {
     esp_netif_t *wifi_netif = (esp_netif_t *)arg;
 
-    /* OpenThread platform configuration for the native 802.15.4 radio */
-    esp_openthread_platform_config_t ot_platform_config = {
-        .radio_config = {
-            .radio_mode = RADIO_MODE_NATIVE,
-        },
-        .host_config = {
-            .host_connection_mode = HOST_CONNECTION_MODE_NONE,
-        },
-        .port_config = {
-            .storage_partition_name = "nvs",
-            .netif_queue_size = 10,
-            .task_queue_size = 10,
-        },
-    };
+    esp_openthread_lock_acquire(portMAX_DELAY);
 
-    /* Initialize the OpenThread stack */
-    ESP_ERROR_CHECK(esp_openthread_init(&ot_platform_config));
-
-    /* Get the OpenThread instance */
-    otInstance *instance = esp_openthread_get_instance();
-
-    /* Register state-change callback for logging */
-    otSetStateChangedCallback(instance, ot_state_change_callback, instance);
-
-#if OT_CLI_UART_ENABLE
-    /* Enable the OpenThread CLI over USB serial for provisioning.
-     * You can connect via serial monitor and type OT CLI commands
-     * like:  dataset set active <hex>
-     *        ifconfig up
-     *        thread start                                          */
-    esp_openthread_cli_init();
-#endif
-
-    /* Set the Wi-Fi interface as the border router backbone, then init */
     esp_openthread_set_backbone_netif(wifi_netif);
     ESP_ERROR_CHECK(esp_openthread_border_router_init());
 
     ESP_LOGI(TAG, "OpenThread Border Router initialized");
 
-    /* ----- Acquire the dataset and start Thread ----- */
-    esp_openthread_lock_acquire(portMAX_DELAY);
+    otInstance *instance = esp_openthread_get_instance();
 
+    /* ----- Load dataset and start Thread ----- */
     bool dataset_ready = false;
     otOperationalDataset dataset;
 
@@ -389,8 +357,51 @@ static void ot_task(void *arg)
     }
 
     esp_openthread_lock_release();
+    vTaskDelete(NULL);
+}
 
-    /* Main OpenThread run loop — this never returns */
+/* ------------------------------------------------------------------ */
+/*  OpenThread main task                                               */
+/* ------------------------------------------------------------------ */
+
+static void ot_task(void *arg)
+{
+    esp_netif_t *wifi_netif = (esp_netif_t *)arg;
+
+    /* OpenThread platform configuration for the native 802.15.4 radio */
+    esp_openthread_platform_config_t ot_platform_config = {
+        .radio_config = {
+            .radio_mode = RADIO_MODE_NATIVE,
+        },
+        .host_config = {
+            .host_connection_mode = HOST_CONNECTION_MODE_NONE,
+        },
+        .port_config = {
+            .storage_partition_name = "nvs",
+            .netif_queue_size = 10,
+            .task_queue_size = 10,
+        },
+    };
+
+    /* Initialize the OpenThread stack */
+    ESP_ERROR_CHECK(esp_openthread_init(&ot_platform_config));
+
+    /* Get the OpenThread instance */
+    otInstance *instance = esp_openthread_get_instance();
+
+    /* Register state-change callback for logging */
+    otSetStateChangedCallback(instance, ot_state_change_callback, instance);
+
+#if OT_CLI_UART_ENABLE
+    /* Enable the OpenThread CLI over USB serial for provisioning */
+    esp_openthread_cli_init();
+#endif
+
+    /* Border router init must happen after the mainloop is running,
+     * so launch it as a separate task. */
+    xTaskCreate(ot_br_init_task, "ot_br_init", 6144, wifi_netif, 5, NULL);
+
+    /* Create CLI task and start the mainloop — this never returns */
     esp_openthread_cli_create_task();
     esp_openthread_launch_mainloop();
 
