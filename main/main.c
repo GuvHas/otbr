@@ -139,6 +139,11 @@ static esp_netif_t *init_wifi(void)
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "Wi-Fi connected successfully");
+
+        /* Create an IPv6 link-local address on the Wi-Fi interface.
+         * The border router needs this to send Router Solicitations
+         * on the backbone — without it, ND6/RS messages fail. */
+        ESP_ERROR_CHECK(esp_netif_create_ip6_linklocal(wifi_netif));
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGE(TAG, "Wi-Fi connection failed — rebooting in 5 s");
         vTaskDelay(pdMS_TO_TICKS(5000));
@@ -394,8 +399,10 @@ static void ot_task(void *arg)
      * so launch it as a separate task. */
     xTaskCreate(ot_br_init_task, "ot_br_init", 6144, wifi_netif, 5, NULL);
 
-    /* Create CLI task and start the mainloop — this never returns */
+    /* Start the mainloop — this never returns */
+#if OT_CLI_UART_ENABLE
     esp_openthread_cli_create_task();
+#endif
     esp_openthread_launch_mainloop();
 
     /* Should never get here */
