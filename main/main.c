@@ -149,7 +149,8 @@ static esp_netif_t *init_wifi(void)
 }
 
 /* ------------------------------------------------------------------ */
-/*  mDNS setup (for Home Assistant discovery)                          */
+/*  mDNS setup (hostname only — the OpenThread border agent handles    */
+/*  _meshcop._udp publication with correct dynamic TXT records)        */
 /* ------------------------------------------------------------------ */
 
 static void init_mdns(void)
@@ -157,24 +158,7 @@ static void init_mdns(void)
     ESP_ERROR_CHECK(mdns_init());
     ESP_ERROR_CHECK(mdns_hostname_set(DEVICE_NAME));
     ESP_ERROR_CHECK(mdns_instance_name_set(MDNS_INSTANCE_NAME));
-
-    /* Advertise the OTBR meshcop service — this is what HA looks for */
-    mdns_txt_item_t meshcop_txt[] = {
-        { "rv", "1" },
-        { "dd", DEVICE_NAME },
-        { "vn", "Espressif" },
-        { "mn", "ESP32-C6 OTBR" },
-    };
-
-    ESP_ERROR_CHECK(mdns_service_add(
-        DEVICE_NAME,         /* instance name  */
-        "_meshcop",          /* service type   */
-        "_udp",              /* protocol       */
-        49191,               /* port           */
-        meshcop_txt,         /* TXT records    */
-        sizeof(meshcop_txt) / sizeof(meshcop_txt[0])));
-
-    ESP_LOGI(TAG, "mDNS started: %s._meshcop._udp.local", DEVICE_NAME);
+    ESP_LOGI(TAG, "mDNS hostname: %s.local", DEVICE_NAME);
 }
 
 /* ------------------------------------------------------------------ */
