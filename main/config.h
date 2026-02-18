@@ -62,8 +62,9 @@
 /*  ADVANCED / OPTIONAL                                                */
 /* ------------------------------------------------------------------ */
 
-/* OpenThread CLI over USB serial — handy for provisioning             */
-#define OT_CLI_UART_ENABLE      1
+/* OpenThread CLI over USB serial — set to 1 for serial provisioning.
+ * When enabled, a ">" prompt appears on the monitor output.           */
+#define OT_CLI_UART_ENABLE      0
 
 /* mDNS instance name (used for HA discovery, derived from DEVICE_NAME)*/
 #define MDNS_INSTANCE_NAME      DEVICE_NAME
