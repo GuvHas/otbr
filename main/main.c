@@ -59,6 +59,7 @@ static const char *TAG = DEVICE_NAME;
 
 #define WIFI_CONNECTED_BIT  BIT0
 #define WIFI_FAIL_BIT       BIT1
+#define WIFI_IPV6_BIT       BIT2
 
 /* ------------------------------------------------------------------ */
 /*  Globals                                                            */
@@ -90,6 +91,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_count = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_GOT_IP6) {
+        ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
+        ESP_LOGI(TAG, "Got IPv6: " IPV6STR, IPV62STR(event->ip6_info.ip));
+        xEventGroupSetBits(s_wifi_event_group, WIFI_IPV6_BIT);
     }
 }
 
@@ -109,11 +114,14 @@ static esp_netif_t *init_wifi(void)
     /* Register event handlers */
     esp_event_handler_instance_t any_wifi_event;
     esp_event_handler_instance_t got_ip_event;
+    esp_event_handler_instance_t got_ip6_event;
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, &any_wifi_event));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, &got_ip_event));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        IP_EVENT, IP_EVENT_GOT_IP6, &wifi_event_handler, NULL, &got_ip6_event));
 
     /* Configure Wi-Fi */
     wifi_config_t wifi_config = {
@@ -303,6 +311,13 @@ static void ot_state_change_callback(otChangedFlags flags, void *context)
 static void ot_br_init_task(void *arg)
 {
     esp_netif_t *wifi_netif = (esp_netif_t *)arg;
+
+    /* Wait for the Wi-Fi interface to have an IPv6 link-local address.
+     * The border router sends Router Solicitations on the backbone and
+     * will fail with "Failed to send ND6 message" if IPv6 isn't ready. */
+    ESP_LOGI(TAG, "Waiting for IPv6 link-local on Wi-Fi...");
+    xEventGroupWaitBits(s_wifi_event_group, WIFI_IPV6_BIT,
+                        pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
 
     esp_openthread_lock_acquire(portMAX_DELAY);
 
