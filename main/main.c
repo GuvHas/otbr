@@ -32,7 +32,6 @@
 
 #include "esp_openthread.h"
 #include "esp_openthread_border_router.h"
-#include "esp_openthread_cli.h"
 #include "esp_openthread_lock.h"
 #include "esp_openthread_netif_glue.h"
 #include "esp_openthread_types.h"
@@ -405,19 +404,11 @@ static void ot_task(void *arg)
     /* Register state-change callback for logging */
     otSetStateChangedCallback(instance, ot_state_change_callback, instance);
 
-#if OT_CLI_UART_ENABLE
-    /* Enable the OpenThread CLI over USB serial for provisioning */
-    esp_openthread_cli_init();
-#endif
-
     /* Border router init must happen after the mainloop is running,
      * so launch it as a separate task. */
     xTaskCreate(ot_br_init_task, "ot_br_init", 6144, wifi_netif, 5, NULL);
 
     /* Start the mainloop — this never returns */
-#if OT_CLI_UART_ENABLE
-    esp_openthread_cli_create_task();
-#endif
     esp_openthread_launch_mainloop();
 
     /* Should never get here */
