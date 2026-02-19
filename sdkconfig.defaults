@@ -62,10 +62,11 @@ CONFIG_OPENTHREAD_DNS64_CLIENT=y
 CONFIG_OPENTHREAD_SRP_CLIENT=y
 CONFIG_OPENTHREAD_SRP_CLIENT_MAX_SERVICES=5
 
-# ---- OpenThread CLI (for serial provisioning) ----
-# Disabled by default to suppress ">" prompt in monitor output.
-# Set to y (and OT_CLI_UART_ENABLE=1 in config.h) to re-enable.
-CONFIG_OPENTHREAD_CLI=n
+# ---- OpenThread CLI ----
+# The CLI library must be compiled (=y) because the border agent and
+# other OT components depend on it.  The ">" prompt is suppressed by
+# NOT calling esp_openthread_cli_init/create_task in the application.
+CONFIG_OPENTHREAD_CLI=y
 
 # ---- OpenThread logging ----
 CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=y
