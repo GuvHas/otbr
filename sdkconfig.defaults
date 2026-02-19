@@ -63,7 +63,9 @@ CONFIG_OPENTHREAD_SRP_CLIENT=y
 CONFIG_OPENTHREAD_SRP_CLIENT_MAX_SERVICES=5
 
 # ---- OpenThread CLI (for serial provisioning) ----
-CONFIG_OPENTHREAD_CLI=y
+# Disabled by default to suppress ">" prompt in monitor output.
+# Set to y (and OT_CLI_UART_ENABLE=1 in config.h) to re-enable.
+CONFIG_OPENTHREAD_CLI=n
 
 # ---- OpenThread logging ----
 CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=y
